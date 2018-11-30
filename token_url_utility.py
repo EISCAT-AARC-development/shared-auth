@@ -14,17 +14,18 @@ class ExtendedUrl(furl):
         self.decoded_jwt = None
         self.exc_in_validation = None
 
-    def __get_url_part_to_validate__(self, path, query):
-        res_url = str(path) + '/' + query.encode()
-        if (res_url[0] == '/'):
-            res_url = res_url[1:]
-        return res_url
+    # def __get_url_part_to_validate__(self, path, query):
+    #     res_url = str(path) + '/' + query.encode()
+    #     if (res_url[0] == '/'):
+    #         res_url = res_url[1:]
+    #     return res_url
 
     def __create_token__(self, user_id, exp_seconds, download_times, private_key):
         jwt_payload = {
             'sub' : str(sha256(user_id)),
             'exp' : datetime.utcnow() + timedelta(seconds=exp_seconds),
-            'r_url' : self.__get_url_part_to_validate__(self.path, self.query),
+            'path' : str(self.path),
+            'query': str(self.query),
             'd_times' : download_times
         }
 
@@ -35,11 +36,6 @@ class ExtendedUrl(furl):
         encoded_jwt = self.path.segments[0] 
         # pyjwt automatically validate signature and expiration time
         token = jwt.decode(encoded_jwt, public_key)
-        path_without_token = Path(self.path.segments[1:])
-        path_without_token.isabsolute = False
-        url_part_to_validate = self.__get_url_part_to_validate__(path_without_token, self.query)
-        if (token['r_url'] != url_part_to_validate):
-            raise UrlValidationException('resource url validation error') 
         if (additional_validator is not None):
             additional_validator.validate(token)             
         self.decoded_jwt = token
@@ -57,14 +53,12 @@ class ExtendedUrl(furl):
         else:
             if (self.exc_in_validation is not None):
                 raise self.exc_in_validation
-            else:
-                return self.decoded_jwt
+        return self.decoded_jwt
 
 
     def inject_token(self, user_id, exp_seconds, download_times, private_key):
         encoded_jwt = self.__create_token__(user_id, exp_seconds, download_times, private_key)
-        path_within_token = [encoded_jwt] + self.path.segments 
-        self.set(path=path_within_token)
+        self.set(path=[encoded_jwt], query=None)
 
     def is_valid(self, public_key):
         try: 
@@ -93,10 +87,15 @@ class ExtendedUrl(furl):
             The signature is invalid
 
         """
-        return self.__validate__(public_key)
-
-    def remove_token_from_url(self):
-        self.set(path=self.path.segments[1:])
+        claims = self.__validate__(public_key)
+        return claims
+        
+    def restore_original_url(self):
+        if (self.decoded_jwt is None):
+            raise Exception('You must call either is_valid(..) or get_claims(..) method before calling restore_original_url')
+        path = self.decoded_jwt['path'] 
+        query = self.decoded_jwt['query']
+        self.set(path=path, query=query)
 
 
 class DownloadTimesValidator:

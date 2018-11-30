@@ -31,7 +31,7 @@ try:
 except Exception as e:
     print (e.message)
 
-ext_url2.remove_token_from_url()
+ext_url2.restore_original_url()
 
 print('original URL: ' + ext_url2.url)
 
@@ -49,19 +49,18 @@ ext_url2 = ExtendedUrl(download_url)
 
 if (ext_url2.is_valid(public_key)):
     print('validation succeeded')
+    try:
+        claims = ext_url2.get_claims(public_key)
+        print ('claims inside token')
+        print (claims)
+        ext_url2.restore_original_url()
+        print('original URL: ' + ext_url2.url)
+    except Exception as e:
+        print (e.message)
 else:
     print('validation failed')
 
-try:
-    claims = ext_url2.get_claims(public_key)
-    print ('claims inside token')
-    print (claims)
-except Exception as e:
-    print (e.message)
 
-ext_url2.remove_token_from_url()
-
-print('original URL: ' + ext_url2.url)
 
 
 
