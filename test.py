@@ -1,67 +1,108 @@
+import unittest
+from token_url_utility import ExtendedUrl, TokenUsageLimitExceededException, UrlValidationException
+from jwt import ExpiredSignatureError
+import os
+import time
 
-from token_url_utility import ExtendedUrl
+class TestExtendedUrl(unittest.TestCase):
 
-initial_url = 'https://example.com:8443/dir1/sample_res.tar?par1=1&par2=2'
+    def _delete_download_log(self):
+        logpath='download.log'
+        if (os.path.exists(logpath)):
+            os.remove(logpath)
 
-private_key = open('keys/private_key.pem','r').read()
-public_key = open('keys/public_key.pem','r').read()
+    def setUp(self):
+        self.initial_url = 'https://example.com:8443/dir1/sample_res.tar?par1=1&par2=2'
+        self.private_key = open('keys/private_key.pem','r').read()
+        self.public_key = open('keys/public_key.pem','r').read()
+        
+    def test_create_extended_url(self):
+        self._delete_download_log()
+        ext_url = ExtendedUrl(self.initial_url)
 
+        token_max_usage = 1
+        token_validity_secs = 60
+        user = 'john'
 
-print('TEST1: it shoud validate')
+        ext_url.inject_token(user, token_validity_secs, token_max_usage, self.private_key)
+        download_url = ext_url.url
 
-ext_url = ExtendedUrl(initial_url)
+        self.assertIsNotNone(download_url)
 
-ext_url.inject_token('john', 60, 1, private_key)
+    def test_create_extended_url_and_validate_it(self):
+        self._delete_download_log()
 
-download_url = ext_url.url
+        ext_url = ExtendedUrl(self.initial_url)
 
-print (download_url)
+        token_max_usage = 1
+        token_validity_secs = 60
+        user = 'john'
 
-ext_url2 = ExtendedUrl(download_url)
+        ext_url.inject_token(user, token_validity_secs, token_max_usage, self.private_key)
 
-if (ext_url2.is_valid(public_key)):
-    print('validation succeeded')
-else:
-    print('validation failed')
+        download_url = ext_url.url
 
-try:
-    claims = ext_url2.get_claims(public_key)
-    print ('claims inside token')
-    print (claims)
-except Exception as e:
-    print (e.message)
+        ext_url2 = ExtendedUrl(download_url)
 
-ext_url2.remove_token_from_url()
-
-print('original URL: ' + ext_url2.url)
-
-print('TEST2: it should give expiration error')
-
-ext_url = ExtendedUrl(initial_url)
-
-ext_url.inject_token('john', -1, 1, private_key)
-
-download_url = ext_url.url
-
-print (download_url)
-
-ext_url2 = ExtendedUrl(download_url)
-
-if (ext_url2.is_valid(public_key)):
-    print('validation succeeded')
-else:
-    print('validation failed')
-
-try:
-    claims = ext_url2.get_claims(public_key)
-    print ('claims inside token')
-    print (claims)
-except Exception as e:
-    print (e.message)
-
-ext_url2.remove_token_from_url()
-
-print('original URL: ' + ext_url2.url)
+        self.assertTrue(ext_url2.is_valid(self.public_key))
 
 
+    def test_create_extended_url_and_extract_claims(self):
+        self._delete_download_log()
 
+        ext_url = ExtendedUrl(self.initial_url)
+
+        token_max_usage = 1
+        token_validity_secs = 60
+        user = 'john'
+
+        ext_url.inject_token(user, token_validity_secs, token_max_usage, self.private_key)
+
+        download_url = ext_url.url
+
+        ext_url2 = ExtendedUrl(download_url)
+
+        ext_url2.get_claims(self.public_key)
+
+    def test_use_extended_url_more_than_allowed(self):
+        self._delete_download_log()
+        ext_url = ExtendedUrl(self.initial_url)
+
+        token_max_usage = 2
+        token_validity_secs = 60
+        user = 'john'
+
+        ext_url.inject_token(user, token_validity_secs, token_max_usage, self.private_key)
+
+        download_url = ext_url.url
+
+        ext_url2 = ExtendedUrl(download_url)
+        ext_url2.get_claims(self.public_key)
+
+        ext_url3 = ExtendedUrl(download_url)
+        ext_url3.get_claims(self.public_key)
+
+        ext_url4 = ExtendedUrl(download_url)
+        self.assertRaises(TokenUsageLimitExceededException, ext_url4.get_claims, self.public_key)        
+
+    def test_assert_signature_expiration_detection(self):
+        self._delete_download_log()
+        ext_url = ExtendedUrl(self.initial_url)
+
+        token_max_usage = 1
+        token_validity_secs = 1
+        user = 'john'
+
+        ext_url.inject_token(user, token_validity_secs, token_max_usage, self.private_key)
+
+        download_url = ext_url.url
+
+        time.sleep(2)
+
+        ext_url2 = ExtendedUrl(download_url)
+
+        self.assertRaises(ExpiredSignatureError, ext_url2.get_claims, self.public_key)
+
+
+if __name__ == '__main__':
+    unittest.main()
