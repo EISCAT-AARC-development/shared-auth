@@ -1,68 +1,120 @@
 import jwt
-import furl 
+from furl import furl, Path 
 from datetime import datetime, timedelta
 from hashlib import sha256
+import os
 
 class UrlValidationException(Exception): pass
 
-class ExtendedUrl(furl.furl):
+class TokenUsageLimitExceededException(Exception): pass
 
-    def __create_token(self, user_id, exp_seconds, download_times, private_key):
+class ExtendedUrl(furl):
+
+    logpath = 'download.log'
+
+    def __init__(self, url):
+        super(ExtendedUrl, self).__init__(url)
+        self.decoded_jwt = None
+        self.exc_in_validation = None
+
+    def _get_url_part_to_validate(self, path, query):
+        res_url = str(path) + '/' + query.encode()
+        if (res_url[0] == '/'):
+            res_url = res_url[1:]
+        return res_url
+
+    def _create_token(self, user_id, exp_seconds, download_times, private_key):
         jwt_payload = {
             'sub' : str(sha256(user_id)),
             'exp' : datetime.utcnow() + timedelta(seconds=exp_seconds),
-            'url' : self.__get_url_part_to_validate(),
+            'r_url' : self._get_url_part_to_validate(self.path, self.query),
             'd_times' : download_times
         }
 
         encoded_jwt = jwt.encode(jwt_payload, private_key, algorithm='RS256')
         return encoded_jwt
 
-    def __get_url_part_to_validate(self):       
-        return str(self.path) + '/' + self.query.encode()
+    def _validate_token_usage_limit(self, encoded_jwt, limit):
+
+        if not(os.path.exists(self.logpath)):
+            with open(self.logpath, 'w+') as file:
+                file.write('{token}\n'.format(token=encoded_jwt))
+
+        else:
+            if (len(filter(lambda line: line == encoded_jwt, open(self.logpath, 'r').read().splitlines())) >= limit):
+                raise TokenUsageLimitExceededException('token usage exceeded the limit defined')
+            else:
+                with open(self.logpath, 'a') as log:
+                    log.write('{token}\n'.format(token=encoded_jwt))
+
+
+    def _extract_token(self, public_key):
+        encoded_jwt = self.path.segments[0] 
+        # pyjwt automatically validate signature and expiration time
+        token = jwt.decode(encoded_jwt, public_key)
+        path_without_token = Path(self.path.segments[1:])
+        path_without_token.isabsolute = False
+        url_part_to_validate = self._get_url_part_to_validate(path_without_token, self.query)
+        if (token['r_url'] != url_part_to_validate):
+            raise UrlValidationException('resource url validation error') 
+
+        self._validate_token_usage_limit(encoded_jwt, token['d_times'])    
+
+        self.decoded_jwt = token
+
+    def _extraction_not_already_performed(self):
+        return self.decoded_jwt is None and self.exc_in_validation is None
+
+    def _validate(self, public_key):
+        if (self._extraction_not_already_performed()):
+            try:
+                self._extract_token(public_key)
+            except Exception as e:
+                self.exc_in_validation = e
+                raise e
+        else:
+            if (self.exc_in_validation is not None):
+                raise self.exc_in_validation
+            else:
+                return self.decoded_jwt
+
 
     def inject_token(self, user_id, exp_seconds, download_times, private_key):
-        encoded_jwt = self.__create_token(user_id, exp_seconds, download_times, private_key)
+        encoded_jwt = self._create_token(user_id, exp_seconds, download_times, private_key)
         path_within_token = [encoded_jwt] + self.path.segments 
         self.set(path=path_within_token)
 
-    def validate(self, public_key):
-        encoded_jwt = self.path.segments[0] 
-        # pyjwt automatically validate signature and expiration time
+    def is_valid(self, public_key):
         try: 
-            token = jwt.decode(encoded_jwt, public_key)
-            self.set(path=self.path.segments[1:])
-            if (token['url'] != self.__get_url_part_to_validate()) :
-                raise Exception('resource url mismatch') 
-            # TODO: validate downloadtimes 
-                
-        except Exception as e:
-            raise UrlValidationException(e.message)
+            self._validate(public_key)
+        except:
+            return False
+        return self.exc_in_validation is None  
 
-initial_url = 'https://example.com:8443/dir1/sample_res.tar?par1=1&par2=2'
+    def get_claims(self, public_key):
+        """
+        Raises
+        ------
+        UrlValidationException
+            The resource url within the token does not match the one to which the token is prepended  
 
-private_key = open('keys/private_key.pem','r').read()
-public_key = open('keys/public_key.pem','r').read()
+        ExpiredSignatureError
+            The token is expired
 
-ext_url = ExtendedUrl(initial_url)
+        TokenUsageLimitExceededException
+            The token was used more than the number of times it was allowed to
 
-ext_url.inject_token('john', 60, 1, private_key)
+        DecodeError
+            Error in decoding token
 
-download_url = ext_url.url
+        ImmatureSignatureError
+            The signature is invalid
 
-print (download_url)
+        """
+        return self._validate(public_key)
 
-
-ext_url2 = ExtendedUrl(download_url)
-
-try:
-    ext_url2.validate(public_key)
-    print('validation succeeded')
-except:
-    print('validation failed')
-
-
-
+    def remove_token_from_url(self):
+        self.set(path=self.path.segments[1:])
 
 
 

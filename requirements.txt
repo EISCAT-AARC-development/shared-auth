@@ -1,0 +1,11 @@
+asn1crypto==0.24.0
+cffi==1.11.5
+cryptography==2.4.1
+enum34==1.1.6
+furl==2.0.0
+idna==2.7
+ipaddress==1.0.22
+orderedmultidict==1.0
+pycparser==2.19
+PyJWT==1.6.4
+six==1.11.0
