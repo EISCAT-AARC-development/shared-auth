@@ -4,7 +4,7 @@ import time
 
 
 def is_admin(user):
-    return user in open('superusers.txt').readlines()
+    return user in open('superusers.txt').read().splitlines()
 
 
 def current_user():
@@ -32,7 +32,7 @@ def portal_authz(country, date, type):
     if tld == 'jp': tld = 'ni'
 
     institutes = {line[0]: line[1] for line in csv.reader(open("institutes.csv", "rb"))}
-    persons = {line[0]: line[1] for line in csv.reader(open("persons.csv", "rb"))}
+    persons = {line[0]: line[1] for line in csv.reader(open("people.csv", "rb"))}
 
     if user.split('@')[-1] in institutes.keys():
         tld = institutes[user.split('@')[-1]]
@@ -43,13 +43,9 @@ def portal_authz(country, date, type):
 
     return type == 'info' or \
         tld in country.upper() or \
-            (tld in owners and (
+            (tld in owners.split(' ') and (
                 # EISCAT countries can download old data
                 time.time() > date + 86400 * 366 or
                 # EISCAT countries can download recent CP (UP. AA) data
                 type in common.split(' '))
             )
-
-
-def download_authz(*args):
-    pass
