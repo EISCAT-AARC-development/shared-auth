@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import jwt
 from furl import furl, Path 
 from datetime import datetime, timedelta
@@ -115,7 +116,3 @@ class ExtendedUrl(furl):
 
     def remove_token_from_url(self):
         self.set(path=self.path.segments[1:])
-
-
-
-

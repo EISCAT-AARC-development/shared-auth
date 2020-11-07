@@ -1,3 +1,4 @@
+#! /usr/bin/env python3
 import csv
 import os
 import time
@@ -8,12 +9,10 @@ def is_admin(user):
 
 
 def current_user():
-    return os.environ['eduPersonUniqueID']
-
+    return os.environ['uid']
 
 def is_authenticated():
     return 'Shib_Session_ID' in os.environ.keys()
-
 
 def portal_authz(country, date, type):
     owners = 'UK NI NO SW FI CN'
