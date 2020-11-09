@@ -26,7 +26,7 @@ class ExtendedUrl(furl):
 
     def _create_token(self, user_id, exp_seconds, download_times, private_key):
         jwt_payload = {
-            'sub' : str(sha256(user_id)),
+            'sub' : str(sha256(user_id.encode('utf-8'))),
             'exp' : datetime.utcnow() + timedelta(seconds=exp_seconds),
             'r_url' : self._get_url_part_to_validate(self.path, self.query),
             'd_times' : download_times
