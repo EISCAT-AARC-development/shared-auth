@@ -7,5 +7,5 @@ idna==2.7
 ipaddress==1.0.22
 orderedmultidict==1.0
 pycparser==2.19
-PyJWT==1.6.4
+PyJWT==2.4.0
 six==1.11.0
